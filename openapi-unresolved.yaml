@@ -1,0 +1,659 @@
+openapi: 3.0.0
+info:
+  title: API de Recetas y Cursos de Cocina
+  version: "1.0.0"
+  description: Documentación completa de la API REST para la aplicación de recetas, gestión de cursos, autenticación, registro, búsqueda y más.
+servers:
+  - url: http://localhost:8080
+
+tags:
+  - name: Autenticación
+    description: Operaciones de inicio de sesión, registro y recuperación de contraseña
+  - name: Usuarios
+    description: Gestión de perfiles de usuario y conversión a alumnos
+  - name: Recetas
+    description: Operaciones relacionadas con recetas de cocina
+  - name: Cursos
+    description: Gestión de cursos de cocina e inscripciones
+  - name: Búsquedas
+    description: Endpoints de búsqueda y filtrado
+  - name: Utilitarios
+    description: Endpoints auxiliares para verificación y listados básicos
+
+paths:
+  # ========================
+  # 1. AUTENTICACIÓN
+  # ========================
+  /api/inicio:
+    get:
+      tags:
+        - Autenticación
+      summary: Inicio de la aplicación
+      description: Devuelve las 3 últimas recetas si hay conexión; de lo contrario, informa error de conexión.
+      responses:
+        '200':
+          description: Últimas 3 recetas disponibles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+        '503':
+          description: Servicio no disponible por falta de conexión
+
+  /api/login:
+    post:
+      tags:
+        - Autenticación
+      summary: Autenticación de usuario/alumno
+      description: Permite a usuarios y alumnos iniciar sesión.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Login'
+      responses:
+        '200':
+          description: Autenticación exitosa (devuelve token o información de sesión)
+        '401':
+          description: Credenciales inválidas
+
+  /api/usuarios/password/recovery:
+    post:
+      tags:
+        - Autenticación
+      summary: Recuperación de contraseña
+      description: Envía un email con el código de reinicio de contraseña.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mail:
+                  type: string
+      responses:
+        '200':
+          description: Código de reinicio enviado
+        '404':
+          description: Email no registrado o proceso de registro incompleto
+
+  /api/usuarios/password/reset:
+    post:
+      tags:
+        - Autenticación
+      summary: Resetear la contraseña
+      description: Permite cambiar la contraseña usando el código de reinicio recibido.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mail:
+                  type: string
+                codigo:
+                  type: string
+                nuevaClave:
+                  type: string
+      responses:
+        '200':
+          description: Contraseña actualizada
+        '400':
+          description: Error en el código o datos incorrectos
+
+  # ========================
+  # 2. USUARIOS
+  # ========================
+  /api/registro/iniciar:
+    post:
+      tags:
+        - Usuarios
+      summary: Iniciar el registro (visitante)
+      description: Permite que un visitante ingrese mail y alias. Se verifica la unicidad y se envía un código de confirmación.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroInicio'
+      responses:
+        '200':
+          description: Código de confirmación enviado
+        '400':
+          description: Mail o alias ya existente
+
+  /api/registro/confirmar:
+    post:
+      tags:
+        - Usuarios
+      summary: Confirmar el registro
+      description: Completa el registro del visitante utilizando el código y datos adicionales.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegistroConfirmar'
+      responses:
+        '201':
+          description: Registro completado
+        '400':
+          description: Código inválido o datos incompletos
+
+  /api/usuarios/{id}/convertir-a-alumno:
+    post:
+      tags:
+        - Usuarios
+      summary: Convertir usuario a alumno
+      description: Permite a un usuario existente actualizar sus datos para convertirse en alumno.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AlumnoActualizar'
+      responses:
+        '200':
+          description: Usuario convertido a alumno
+        '400':
+          description: Datos inválidos
+
+  /api/usuarios/{id}:
+    get:
+      tags:
+        - Usuarios
+      summary: Obtener perfil de usuario
+      description: Devuelve los datos públicos de un usuario o alumno.
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Datos del usuario
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Usuario'
+        '404':
+          description: Usuario no encontrado
+
+  # ========================
+  # 3. RECETAS
+  # ========================
+  /api/recetas:
+    get:
+      tags:
+        - Recetas
+      summary: Listar todas las recetas
+      description: Devuelve todas las recetas; se pueden aplicar filtros opcionales.
+      parameters:
+        - name: idUsuario
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: idTipo
+          in: query
+          required: false
+          schema:
+            type: integer
+        - name: orden
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de recetas
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+    post:
+      tags:
+        - Recetas
+      summary: Crear una receta
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecetaCrear'
+      responses:
+        '201':
+          description: Receta creada
+        '400':
+          description: Datos inválidos
+
+  /api/recetas/{id}:
+    get:
+      tags:
+        - Recetas
+      summary: Obtener una receta por ID
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detalle de la receta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecetaDetalle'
+        '404':
+          description: Receta no encontrada
+    put:
+      tags:
+        - Recetas
+      summary: Actualizar una receta
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecetaCrear'
+      responses:
+        '200':
+          description: Receta actualizada
+        '400':
+          description: Datos inválidos
+        '404':
+          description: Receta no encontrada
+    delete:
+      tags:
+        - Recetas
+      summary: Eliminar una receta
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Receta eliminada
+        '404':
+          description: Receta no encontrada
+
+  # ========================
+  # 4. BÚSQUEDAS
+  # ========================
+  /api/recetas/search:
+    get:
+      tags:
+        - Búsquedas
+      summary: Buscar recetas por nombre
+      parameters:
+        - name: nombre
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: orden
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de recetas que coinciden con el criterio
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+
+  /api/recetas/tipo/{tipo}:
+    get:
+      tags:
+        - Búsquedas
+      summary: Buscar recetas por tipo (categoría)
+      parameters:
+        - name: tipo
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: orden
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de recetas del tipo indicado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+
+  /api/recetas/ingrediente:
+    get:
+      tags:
+        - Búsquedas
+      summary: Buscar recetas por ingrediente (incluir ingrediente)
+      parameters:
+        - name: nombreIngrediente
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: orden
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de recetas que contienen el ingrediente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+
+  /api/recetas/sin-ingrediente:
+    get:
+      tags:
+        - Búsquedas
+      summary: Buscar recetas sin un ingrediente específico
+      parameters:
+        - name: nombreIngrediente
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: orden
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista de recetas que no contienen el ingrediente
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RecetaResumen'
+
+  # ========================
+  # 5. CURSOS
+  # ========================
+  /api/cursos:
+    get:
+      tags:
+        - Cursos
+      summary: Listar cursos disponibles
+      responses:
+        '200':
+          description: Lista de cursos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Curso'
+
+  /api/cursos/{id}:
+    get:
+      tags:
+        - Cursos
+      summary: Obtener detalles completos de un curso
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detalle del curso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Curso'
+        '404':
+          description: Curso no encontrado
+
+  /api/cursos/{id}/inscripcion:
+    post:
+      tags:
+        - Cursos
+      summary: Inscribirse a un curso
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Inscripcion'
+      responses:
+        '201':
+          description: Inscripción realizada
+        '400':
+          description: Datos inválidos o curso sin vacantes
+
+  # ========================
+  # 6. UTILITARIOS
+  # ========================
+  /api/tipos-receta:
+    get:
+      tags:
+        - Utilitarios
+      summary: Obtener todos los tipos de recetas
+      description: Devuelve un listado de los tipos/categorías de recetas disponibles.
+      responses:
+        '200':
+          description: Lista de tipos de receta
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /api/verificar-alias:
+    get:
+      tags:
+        - Utilitarios
+      summary: Verificar si un alias está disponible
+      parameters:
+        - name: alias
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Alias disponible o no
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  disponible:
+                    type: boolean
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    # Recetas
+    RecetaResumen:
+      type: object
+      properties:
+        idReceta:
+          type: integer
+        nombreReceta:
+          type: string
+
+    RecetaCrear:
+      type: object
+      properties:
+        nombreReceta:
+          type: string
+        descripcionReceta:
+          type: string
+        porciones:
+          type: integer
+        cantidadPersonas:
+          type: integer
+        idUsuario:
+          type: integer
+        idTipo:
+          type: integer
+
+    RecetaDetalle:
+      allOf:
+        - $ref: '#/components/schemas/RecetaCrear'
+        - type: object
+          properties:
+            idReceta:
+              type: integer
+
+    # Login
+    Login:
+      type: object
+      properties:
+        mail:
+          type: string
+        clave:
+          type: string
+
+    # Registro
+    RegistroInicio:
+      type: object
+      properties:
+        mail:
+          type: string
+        alias:
+          type: string
+
+    RegistroConfirmar:
+      type: object
+      properties:
+        mail:
+          type: string
+        alias:
+          type: string
+        codigo:
+          type: string
+        clave:
+          type: string
+        otrosDatos:
+          type: object
+          description: Objeto con datos adicionales requeridos
+
+    # Conversión a Alumno
+    AlumnoActualizar:
+      type: object
+      properties:
+        tarjetaCredito:
+          type: string
+        fotoDNIFrente:
+          type: string
+        fotoDNIDorso:
+          type: string
+        numeroTramite:
+          type: string
+
+    # Curso
+    Curso:
+      type: object
+      properties:
+        idCurso:
+          type: integer
+        nombre:
+          type: string
+        modalidad:
+          type: string
+        precio:
+          type: number
+        descripcionBreve:
+          type: string
+        descripcionCompleta:
+          type: string
+        temas:
+          type: array
+          items:
+            type: string
+
+    # Inscripción a curso
+    Inscripcion:
+      type: object
+      properties:
+        idAlumno:
+          type: integer
+        medioPago:
+          type: string
+        sede:
+          type: string
+
+    #Usuario
+    Usuario:
+      type: object
+      properties:
+        idUsuario:
+          type: integer
+        alias:
+          type: string
+        nombre:
+          type: string
+        mail:
+          type: string
+        habilitado:
+          type: boolean
+        tipo:
+          type: string
